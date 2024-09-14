@@ -2,7 +2,7 @@ import logging
 from decimal import Decimal
 from typing import Dict, List
 
-from hummingbot.connector.connector_base import ConnectorBase
+from hummingbot.connector.connector_base import ConnectorBase # type: ignore
 from hummingbot.core.data_type.common import OrderType, TradeType
 from hummingbot.core.data_type.order_candidate import OrderCandidate
 from hummingbot.strategy.script_strategy_base import ScriptStrategyBase
@@ -19,10 +19,10 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
     exchange = "binance_paper_trade"
 
     # Strategy parameters
-    inventory_target_base_pct = Decimal("0.7")  # Target base asset percentage (50%)
-    threshold = Decimal("0.001")  # Threshold for rebalancing (1%)
-    initial_rebalance_spread = Decimal("0.00")  # Spread for initial rebalance order (0.05%)
-    order_refresh_time = 3600  # Time in seconds before refreshing orders
+    inventory_target_base_pct = Decimal("0.7")  # Target base asset percentage (input 0.5 for 50%)
+    threshold = Decimal("0.001")  # Threshold for rebalancing (input 0.01 for 1%)
+    initial_rebalance_spread = Decimal("0.005")  # Spread for initial rebalance order (input 0.005 for 0.5%)
+    order_refresh_time = 3600  # Time in seconds before refreshing orders (input 3600 for 1 hour)
 
     # Define the market for the strategy
     markets = {exchange: {trading_pair}}
@@ -52,11 +52,11 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
 
     def create_proposal(self) -> List[OrderCandidate]:
         # Calculate the current inventory ratio
-        current_inventory_ratio = self.calculate_inventory_ratio()
+        inventory_current_base_pct = self.calculate_inventory_ratio()
         # Get the current mid-price
         mid_price = self.connectors[self.exchange].get_mid_price(self.trading_pair)
 
-        if self.is_within_range(current_inventory_ratio):
+        if self.is_within_range(inventory_current_base_pct):
             # Scenario B: Create balanced orders
             # Calculate buy and sell prices based on the threshold
             buy_price = mid_price * (Decimal("1") - self.threshold)
@@ -73,12 +73,12 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
         else:
             # Scenario A: Create rebalance order
             # Determine if we need to buy or sell to rebalance
-            is_buy = current_inventory_ratio < self.inventory_target_base_pct
+            is_buy = inventory_current_base_pct < self.inventory_target_base_pct
             # Calculate the rebalance price with the initial spread
             rebalance_price = mid_price * (Decimal("1") - self.initial_rebalance_spread if is_buy
                                            else Decimal("1") + self.initial_rebalance_spread)
             # Calculate the amount needed to rebalance
-            amount = self.calculate_rebalance_amount(current_inventory_ratio)
+            amount = self.calculate_rebalance_amount(inventory_current_base_pct)
 
             # Create the rebalance order candidate
             rebalance_order = OrderCandidate(trading_pair=self.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
@@ -93,14 +93,14 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
         # Get the current mid-price
         mid_price = self.connectors[self.exchange].get_mid_price(self.trading_pair)
         # Calculate the total portfolio value in terms of the base asset
-        total_value = base_balance + quote_balance / mid_price
+        total_value_base = base_balance + quote_balance / mid_price
         # Calculate and return the inventory ratio
-        return base_balance / total_value if total_value > 0 else Decimal("0")
+        return base_balance / total_value_base if total_value_base > 0 else Decimal("0")
 
-    def is_within_range(self, current_ratio: Decimal) -> bool:
+    def is_within_range(self, inventory_current_base_pct: Decimal) -> bool:
         # Check if the current ratio is within the target range
         return (self.inventory_target_base_pct - self.threshold
-                <= current_ratio
+                <= inventory_current_base_pct
                 <= self.inventory_target_base_pct + self.threshold)
 
     def calculate_order_amount(self) -> Decimal:
@@ -110,20 +110,22 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
         # Get the current mid-price
         mid_price = self.connectors[self.exchange].get_mid_price(self.trading_pair)
         # Calculate the total portfolio value in terms of the base asset
-        total_value = base_balance + quote_balance / mid_price
+        total_value_base = base_balance + quote_balance / mid_price
         # Calculate the order amount as a fraction of the total value
-        return (total_value * self.threshold) / Decimal("2")
+        return (total_value_base * self.threshold) / Decimal("2")
 
-    def calculate_rebalance_amount(self, current_ratio: Decimal) -> Decimal:
+    def calculate_rebalance_amount(self, inventory_current_base_pct: Decimal) -> Decimal:
         # Get the available balances
         base_balance = self.connectors[self.exchange].get_available_balance(self.trading_pair.split("-")[0])
         quote_balance = self.connectors[self.exchange].get_available_balance(self.trading_pair.split("-")[1])
         # Get the current mid-price
         mid_price = self.connectors[self.exchange].get_mid_price(self.trading_pair)
         # Calculate the total portfolio value in terms of the base asset
-        total_value = base_balance + quote_balance / mid_price
+        total_value_base = base_balance + quote_balance / mid_price
+        # Calculate the total portfolio value in terms of the quote asset
+        total_value_quote = base_balance * mid_price + quote_balance
         # Calculate the target base asset amount
-        target_base_amount = total_value * self.inventory_target_base_pct
+        target_base_amount = total_value_base * self.inventory_target_base_pct
         # Calculate the amount needed to rebalance
         return abs(target_base_amount - base_balance)
 
@@ -181,10 +183,10 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
 
         # Add strategy performance metrics to the status
         mid_price = self.connectors[self.exchange].get_mid_price(self.trading_pair)
-        current_inventory_ratio = self.calculate_inventory_ratio()
+        inventory_current_base_pct = self.calculate_inventory_ratio()
         lines.extend(["\n----------------------------------------------------"])
-        lines.extend([f"  Inventory Target: {self.inventory_target_base_pct:.1%}"])
-        lines.extend([f"  Current Inventory Ratio: {current_inventory_ratio:.1%}"])
+        lines.extend([f"  Inventory Target (Base): {self.inventory_target_base_pct:.1%}"])
+        lines.extend([f"  Current Inventory (Base): {inventory_current_base_pct:.1%}"])
         lines.extend([f"  Threshold: {self.threshold:.1%}"])
         lines.extend([f"  Mid Price: {mid_price:.4f}"])
         lines.extend([f"  Total Buy Orders: {self.total_buy_orders} | Total Sell Orders: {self.total_sell_orders}"])
