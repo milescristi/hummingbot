@@ -19,8 +19,8 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
     exchange = "binance_paper_trade"
 
     # Strategy parameters
-    inventory_target_base_pct = Decimal("0.7")  # Target base asset percentage (input 0.5 for 50%)
-    threshold = Decimal("0.001")  # Threshold for rebalancing (input 0.01 for 1%)
+    inventory_target_base_pct = Decimal("0.5")  # Target base asset percentage (input 0.5 for 50%)
+    threshold = Decimal("0.01")  # Threshold for rebalancing (input 0.01 for 1%)
     initial_rebalance_spread = Decimal("0.005")  # Spread for initial rebalance order (input 0.005 for 0.5%)
     order_refresh_time = 3600  # Time in seconds before refreshing orders (input 3600 for 1 hour)
 
@@ -59,8 +59,15 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
         if self.is_within_range(inventory_current_base_pct):
             # Scenario B: Create balanced orders
             # Calculate buy and sell prices based on the threshold
-            buy_price = mid_price * (Decimal("1") - self.threshold)
-            sell_price = mid_price * (Decimal("1") + self.threshold)
+            base_balance = self.connectors[self.exchange].get_available_balance(self.trading_pair.split("-")[0])
+            quote_balance = self.connectors[self.exchange].get_available_balance(self.trading_pair.split("-")[1])
+
+            # Updated buy_price calculation
+            buy_price = (quote_balance * self.inventory_target_base_pct) / (base_balance * (1 - self.inventory_target_base_pct) - (base_balance * self.threshold))
+
+            # Updated sell_price calculation
+            sell_price = (quote_balance * self.inventory_target_base_pct) / (base_balance * (1 - self.inventory_target_base_pct) + (base_balance * self.threshold))
+
             # Calculate the order amount
             amount = self.calculate_order_amount()
 
@@ -111,8 +118,8 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
         mid_price = self.connectors[self.exchange].get_mid_price(self.trading_pair)
         # Calculate the total portfolio value in terms of the base asset
         total_value_base = base_balance + quote_balance / mid_price
-        # Calculate the order amount as a fraction of the total value
-        return (total_value_base * self.threshold) / Decimal("2")
+        # Calculate the order amount needed to restore the inventory to the target ratio
+        return total_value_base * self.threshold
 
     def calculate_rebalance_amount(self, inventory_current_base_pct: Decimal) -> Decimal:
         # Get the available balances
