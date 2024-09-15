@@ -62,11 +62,11 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
             base_balance = self.connectors[self.exchange].get_available_balance(self.trading_pair.split("-")[0])
             quote_balance = self.connectors[self.exchange].get_available_balance(self.trading_pair.split("-")[1])
 
-            # Updated buy_price calculation
-            buy_price = (quote_balance * self.inventory_target_base_pct) / (base_balance * (1 - self.inventory_target_base_pct) - (base_balance * self.threshold))
+            # Corrected buy_price calculation
+            buy_price = (quote_balance * self.inventory_target_base_pct) / (base_balance * (1 - self.inventory_target_base_pct) + (base_balance * self.threshold))
 
-            # Updated sell_price calculation
-            sell_price = (quote_balance * self.inventory_target_base_pct) / (base_balance * (1 - self.inventory_target_base_pct) + (base_balance * self.threshold))
+            # Corrected sell_price calculation
+            sell_price = (quote_balance * self.inventory_target_base_pct) / (base_balance * (1 - self.inventory_target_base_pct) - (base_balance * self.threshold))
 
             # Calculate the order amount
             amount = self.calculate_order_amount()
