@@ -19,7 +19,7 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
     exchange = "binance_paper_trade"
 
     # Strategy parameters
-    inventory_target_base_pct = Decimal("0.66")  # Target base asset percentage (input 0.5 for 50%)
+    inventory_target_base_pct = Decimal("0.6")  # Target base asset percentage (input 0.5 for 50%)
     threshold = Decimal("0.001")  # Threshold for rebalancing (input 0.01 for 1%)
     initial_rebalance_spread = Decimal("0.00")  # Spread for initial rebalance order (input 0.005 for 0.5%)
     order_refresh_time = 3600  # Time in seconds before refreshing orders (input 3600 for 1 hour)
