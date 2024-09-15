@@ -70,6 +70,7 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
 
             # Calculate the order amount
             amount = self.calculate_order_amount()
+            self.logger().info(f"Calculated order amount: {amount}")
 
             # Create buy and sell order candidates
             buy_order = OrderCandidate(trading_pair=self.trading_pair, is_maker=True, order_type=OrderType.LIMIT,
@@ -137,11 +138,14 @@ class RebalancingMarketMakingStrategy(ScriptStrategyBase):
         return abs(target_base_amount - base_balance)
 
     def adjust_proposal_to_budget(self, proposal: List[OrderCandidate]) -> List[OrderCandidate]:
-        # Adjust the order proposal to fit within the available budget
-        return self.connectors[self.exchange].budget_checker.adjust_candidates(proposal, all_or_none=True)
+        adjusted_proposal = self.connectors[self.exchange].budget_checker.adjust_candidates(proposal, all_or_none=True)
+        self.logger().info(f"Original proposal: {proposal}")
+        self.logger().info(f"Adjusted proposal: {adjusted_proposal}")
+        return adjusted_proposal
 
     def place_orders(self, proposal: List[OrderCandidate]) -> None:
         for order in proposal:
+            self.logger().info(f"Attempting to place order: {order}")
             if order.amount > 0:
                 # Place the order if the amount is greater than zero
                 self.buy(self.exchange, order.trading_pair, order.amount, order.order_type, order.price) if order.order_side == TradeType.BUY else self.sell(self.exchange, order.trading_pair, order.amount, order.order_type, order.price)
